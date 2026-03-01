@@ -1,0 +1,14 @@
+{
+  "name": "Chez Scheme 实战教程",
+  "short_name": "Scheme教程",
+  "description": "离线可用的 Chez Scheme 中文交互式教程",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1a1b26",
+  "theme_color": "#7aa2f7",
+  "orientation": "any",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
