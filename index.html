@@ -12756,8 +12756,8 @@ function renderPages(html, title, chapterIdx) {
         if (!peek.tagName) { i++; currentGroup.push(peek.cloneNode(true)); continue; }
         var peekTag = peek.tagName.toUpperCase();
         if (peekTag === 'H1' || peekTag === 'H2' || peekTag === 'HR') break;
-        // If we already have a code block and hit another H3 or code block, flush as separate page
-        if (peekTag === 'H3') {
+        // Only flush at H3 if page is already very full (8+ elements)
+        if (peekTag === 'H3' && pCount >= 8) {
           flushGroup();
         }
         i++;
@@ -12766,9 +12766,9 @@ function renderPages(html, title, chapterIdx) {
         // Flush after a code block + some content following it, to keep pages manageable
         var isCodeBlock = peek.classList && (peek.classList.contains('code-block') || peek.classList.contains('table-wrap'));
         var isExercise = peek.classList && peek.classList.contains('exercise');
-        if (isCodeBlock && pCount >= 4) { flushGroup(); }
-        if (isExercise && pCount >= 3) { flushGroup(); }
-        if (pCount >= 8) { flushGroup(); }
+        if (isCodeBlock && pCount >= 10) { flushGroup(); }
+        if (isExercise && pCount >= 8) { flushGroup(); }
+        if (pCount >= 12) { flushGroup(); }
       }
       flushGroup();
       continue;
