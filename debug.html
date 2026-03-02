@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:20px;font-family:monospace;background:#1a1b26;color:#fff;">
+<script>
+fetch('./index.html').then(r=>r.text()).then(html=>{
+  // Extract all CSS
+  var styles = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
+  var css = styles ? styles.map(s=>s.replace(/<\/?style[^>]*>/gi,'')).join('\n') : '';
+  
+  // Find all width/margin/padding rules
+  var rules = css.match(/[^{}]+\{[^}]*(?:width|margin-left|padding)[^}]*\}/g) || [];
+  var mobile = css.match(/@media[^{]*max-width:768px[^{]*\{([\s\S]*?\})\s*\}/g) || [];
+  
+  document.body.innerHTML = '<h3>Desktop rules with width/margin:</h3><pre>' + 
+    rules.slice(0,15).join('\n\n') + '</pre>' +
+    '<h3>Mobile media query:</h3><pre>' + mobile.join('\n\n') + '</pre>' +
+    '<h3>Screen width: ' + window.innerWidth + 'px</h3>';
+});
+</script>
+</body>
+</html>
