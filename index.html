@@ -12812,9 +12812,18 @@ function renderPages(html, title, chapterIdx) {
     container.appendChild(pageDiv);
   }
 
+  // Force layout recalc before setting scroll
+  container.style.scrollSnapType = 'none';
   container.scrollLeft = 0;
   currentPage = 0;
-  updatePageIndicator();
+  // Re-enable scroll-snap after a tick
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      container.style.scrollSnapType = 'x mandatory';
+      container.scrollLeft = 0;
+      updatePageIndicator();
+    });
+  });
   highlightAll();
   wireCodeBlocks();
 }
@@ -12837,7 +12846,38 @@ function onPagesScroll() {
       currentPage = newPage;
       updatePageIndicator();
     }
+    // Auto-advance to next chapter when scrolled past last page
+    if (pagesContainer.scrollLeft >= (totalPages - 1) * w + w * 0.3) {
+      if (currentChapter < chapters.length - 1) {
+        showChapter(currentChapter + 1);
+        return;
+      }
+    }
+    // Auto-go to previous chapter when scrolled before first page
+    if (pagesContainer.scrollLeft < -w * 0.3) {
+      if (currentChapter > 0) {
+        showChapterAtEnd(currentChapter - 1);
+        return;
+      }
+    }
   }, 50);
+}
+
+function showChapterAtEnd(idx) {
+  currentChapter = idx;
+  var ch = chapters[idx];
+  document.querySelectorAll('.sidebar a').forEach(function(a){
+    a.classList.toggle('active', a.dataset.ch === ch.id);
+  });
+  renderPages(ch.html, ch.title, idx);
+  // Go to last page
+  if (pagesContainer && totalPages > 0) {
+    var lastPage = totalPages - 1;
+    pagesContainer.scrollLeft = lastPage * pagesContainer.clientWidth;
+    currentPage = lastPage;
+    updatePageIndicator();
+  }
+  try { localStorage.setItem('chez-chapter', ch.id); } catch(e) {}
 }
 
 function goToPage(idx) {
