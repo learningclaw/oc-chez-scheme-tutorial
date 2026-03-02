@@ -12697,18 +12697,54 @@ function go(id) {
   document.getElementById('overlay').classList.remove('open');
 }
 
+// Chapter boundary tracking: chapterStartPage[i] = global page index where chapter i starts
+var chapterStartPage = [];
+
 function showChapter(idx) {
-  currentChapter = idx;
-  var ch = chapters[idx];
-  document.querySelectorAll('.sidebar a').forEach(function(a){
-    a.classList.toggle('active', a.dataset.ch === ch.id);
-  });
-  renderPages(ch.html, ch.title, idx);
-  try { localStorage.setItem('chez-chapter', ch.id); } catch(e) {}
+  // Scroll to the first page of the chapter
+  if (pagesContainer && chapterStartPage.length > idx) {
+    var targetPage = chapterStartPage[idx];
+    pagesContainer.style.scrollSnapType = 'none';
+    pagesContainer.scrollLeft = targetPage * pagesContainer.clientWidth;
+    currentPage = targetPage;
+    requestAnimationFrame(function() {
+      pagesContainer.style.scrollSnapType = 'x mandatory';
+      updateCurrentChapter();
+      updatePageIndicator();
+    });
+  }
+  try { localStorage.setItem('chez-chapter', chapters[idx].id); } catch(e) {}
 }
 
-function renderPages(html, title, chapterIdx) {
+function renderAllChapters() {
   var container = document.getElementById('pages-container');
+  container.innerHTML = '';
+  chapterStartPage = [];
+  var globalPageIndex = 0;
+
+  for (var ci = 0; ci < chapters.length; ci++) {
+    chapterStartPage.push(globalPageIndex);
+    var chapterPages = splitChapterIntoPages(chapters[ci].html, ci);
+    for (var p = 0; p < chapterPages.length; p++) {
+      var pageDiv = document.createElement('div');
+      pageDiv.className = 'page';
+      pageDiv.dataset.chapter = ci;
+      for (var n = 0; n < chapterPages[p].length; n++) {
+        pageDiv.appendChild(chapterPages[p][n]);
+      }
+      container.appendChild(pageDiv);
+      globalPageIndex++;
+    }
+  }
+
+  totalPages = globalPageIndex;
+  currentPage = 0;
+  updatePageIndicator();
+  highlightAll();
+  wireCodeBlocks();
+}
+
+function splitChapterIntoPages(html, chapterIdx) {
   var temp = document.createElement('div');
   temp.innerHTML = html;
 
@@ -12781,42 +12817,40 @@ function renderPages(html, title, chapterIdx) {
   }
   flushGroup();
 
-  // No nav buttons - chapter switching is done by swiping past last/first page
-
-  container.innerHTML = '';
-  totalPages = pages.length;
-
-  for (var p = 0; p < pages.length; p++) {
-    var pageDiv = document.createElement('div');
-    pageDiv.className = 'page';
-    for (var n = 0; n < pages[p].length; n++) {
-      pageDiv.appendChild(pages[p][n]);
-    }
-    container.appendChild(pageDiv);
-  }
-
-  // Force layout recalc before setting scroll
-  container.style.scrollSnapType = 'none';
-  container.scrollLeft = 0;
-  currentPage = 0;
-  // Re-enable scroll-snap after a tick
-  requestAnimationFrame(function() {
-    requestAnimationFrame(function() {
-      container.style.scrollSnapType = 'x mandatory';
-      container.scrollLeft = 0;
-      updatePageIndicator();
-    });
-  });
-  highlightAll();
-  wireCodeBlocks();
+  return pages;
 }
 
 function updatePageIndicator() {
-  document.getElementById('page-indicator').textContent = (currentPage + 1) + ' / ' + totalPages;
+  // Show chapter-relative page number
+  var chStart = chapterStartPage[currentChapter] || 0;
+  var chEnd = (currentChapter + 1 < chapterStartPage.length) ? chapterStartPage[currentChapter + 1] : totalPages;
+  var chPage = currentPage - chStart + 1;
+  var chTotal = chEnd - chStart;
+  var chTitle = chapters[currentChapter] ? chapters[currentChapter].title : '';
+  document.getElementById('page-indicator').textContent = chTitle + '  ' + chPage + '/' + chTotal;
 }
 
 var pagesContainer = null;
 var scrollTimer = null;
+
+function updateCurrentChapter() {
+  // Find which chapter the current page belongs to
+  var newChapter = 0;
+  for (var i = chapterStartPage.length - 1; i >= 0; i--) {
+    if (currentPage >= chapterStartPage[i]) {
+      newChapter = i;
+      break;
+    }
+  }
+  if (newChapter !== currentChapter) {
+    currentChapter = newChapter;
+    var ch = chapters[currentChapter];
+    document.querySelectorAll('.sidebar a').forEach(function(a){
+      a.classList.toggle('active', a.dataset.ch === ch.id);
+    });
+    try { localStorage.setItem('chez-chapter', ch.id); } catch(e) {}
+  }
+}
 
 function onPagesScroll() {
   if (scrollTimer) clearTimeout(scrollTimer);
@@ -12827,57 +12861,15 @@ function onPagesScroll() {
     var newPage = Math.round(pagesContainer.scrollLeft / w);
     if (newPage !== currentPage) {
       currentPage = newPage;
+      updateCurrentChapter();
       updatePageIndicator();
-    }
-    // Auto-advance to next chapter when scrolled past last page
-    if (pagesContainer.scrollLeft >= (totalPages - 1) * w + w * 0.3) {
-      if (currentChapter < chapters.length - 1) {
-        showChapter(currentChapter + 1);
-        return;
-      }
-    }
-    // Auto-go to previous chapter when scrolled before first page
-    if (pagesContainer.scrollLeft < -w * 0.3) {
-      if (currentChapter > 0) {
-        showChapterAtEnd(currentChapter - 1);
-        return;
-      }
     }
   }, 50);
 }
 
-function showChapterAtEnd(idx) {
-  currentChapter = idx;
-  var ch = chapters[idx];
-  document.querySelectorAll('.sidebar a').forEach(function(a){
-    a.classList.toggle('active', a.dataset.ch === ch.id);
-  });
-  renderPages(ch.html, ch.title, idx);
-  // Go to last page
-  if (pagesContainer && totalPages > 0) {
-    var lastPage = totalPages - 1;
-    pagesContainer.scrollLeft = lastPage * pagesContainer.clientWidth;
-    currentPage = lastPage;
-    updatePageIndicator();
-  }
-  try { localStorage.setItem('chez-chapter', ch.id); } catch(e) {}
-}
-
 function goToPage(idx) {
   if (!pagesContainer) return;
-  // Swipe past last page → next chapter
-  if (idx >= totalPages) {
-    if (currentChapter < chapters.length - 1) {
-      showChapter(currentChapter + 1);
-    }
-    return;
-  }
-  // Swipe before first page → previous chapter (go to its last page)
-  if (idx < 0) {
-    if (currentChapter > 0) {
-      showChapterAtEnd(currentChapter - 1);
-    }
-    return;
+  if (idx < 0 || idx >= totalPages) return;
   }
   pagesContainer.scrollTo({ left: idx * pagesContainer.clientWidth, behavior: 'smooth' });
 }
@@ -13011,50 +13003,10 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('tap-left').addEventListener('click', function(){ goToPage(currentPage - 1); });
   document.getElementById('tap-right').addEventListener('click', function(){ goToPage(currentPage + 1); });
 
-  // Touch-based chapter switching at boundaries
-  var chSwipeStartX = 0;
-  var chSwipeStartY = 0;
-  var chSwiping = false;
-  var chSwipeThreshold = 80; // px to trigger chapter switch
+  // No touch hacks needed - all chapters are in one continuous scroll container
 
-  pagesContainer.addEventListener('touchstart', function(e) {
-    chSwipeStartX = e.touches[0].clientX;
-    chSwipeStartY = e.touches[0].clientY;
-    chSwiping = false;
-  }, { passive: true });
-
-  pagesContainer.addEventListener('touchmove', function(e) {
-    if (!chSwiping) {
-      var dx = Math.abs(e.touches[0].clientX - chSwipeStartX);
-      var dy = Math.abs(e.touches[0].clientY - chSwipeStartY);
-      if (dx > 10 && dx > dy) chSwiping = true;
-    }
-  }, { passive: true });
-
-  pagesContainer.addEventListener('touchend', function(e) {
-    if (!chSwiping) return;
-    var dx = e.changedTouches[0].clientX - chSwipeStartX;
-    var w = pagesContainer.clientWidth;
-    var atLastPage = currentPage >= totalPages - 1;
-    var atFirstPage = currentPage <= 0;
-    var scrollAtEnd = pagesContainer.scrollLeft >= (totalPages - 1) * w - 5;
-    var scrollAtStart = pagesContainer.scrollLeft <= 5;
-
-    // Swipe left (dx negative) at last page → next chapter
-    if (dx < -chSwipeThreshold && atLastPage && scrollAtEnd) {
-      if (currentChapter < chapters.length - 1) {
-        showChapter(currentChapter + 1);
-        return;
-      }
-    }
-    // Swipe right (dx positive) at first page → prev chapter
-    if (dx > chSwipeThreshold && atFirstPage && scrollAtStart) {
-      if (currentChapter > 0) {
-        showChapterAtEnd(currentChapter - 1);
-        return;
-      }
-    }
-  }, { passive: true });
+    // Render all chapters into one continuous scroll
+  renderAllChapters();
 
   var saved;
   try { saved = localStorage.getItem('chez-chapter'); } catch(e) {}
