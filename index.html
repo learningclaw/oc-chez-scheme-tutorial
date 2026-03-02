@@ -13011,6 +13011,51 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('tap-left').addEventListener('click', function(){ goToPage(currentPage - 1); });
   document.getElementById('tap-right').addEventListener('click', function(){ goToPage(currentPage + 1); });
 
+  // Touch-based chapter switching at boundaries
+  var chSwipeStartX = 0;
+  var chSwipeStartY = 0;
+  var chSwiping = false;
+  var chSwipeThreshold = 80; // px to trigger chapter switch
+
+  pagesContainer.addEventListener('touchstart', function(e) {
+    chSwipeStartX = e.touches[0].clientX;
+    chSwipeStartY = e.touches[0].clientY;
+    chSwiping = false;
+  }, { passive: true });
+
+  pagesContainer.addEventListener('touchmove', function(e) {
+    if (!chSwiping) {
+      var dx = Math.abs(e.touches[0].clientX - chSwipeStartX);
+      var dy = Math.abs(e.touches[0].clientY - chSwipeStartY);
+      if (dx > 10 && dx > dy) chSwiping = true;
+    }
+  }, { passive: true });
+
+  pagesContainer.addEventListener('touchend', function(e) {
+    if (!chSwiping) return;
+    var dx = e.changedTouches[0].clientX - chSwipeStartX;
+    var w = pagesContainer.clientWidth;
+    var atLastPage = currentPage >= totalPages - 1;
+    var atFirstPage = currentPage <= 0;
+    var scrollAtEnd = pagesContainer.scrollLeft >= (totalPages - 1) * w - 5;
+    var scrollAtStart = pagesContainer.scrollLeft <= 5;
+
+    // Swipe left (dx negative) at last page → next chapter
+    if (dx < -chSwipeThreshold && atLastPage && scrollAtEnd) {
+      if (currentChapter < chapters.length - 1) {
+        showChapter(currentChapter + 1);
+        return;
+      }
+    }
+    // Swipe right (dx positive) at first page → prev chapter
+    if (dx > chSwipeThreshold && atFirstPage && scrollAtStart) {
+      if (currentChapter > 0) {
+        showChapterAtEnd(currentChapter - 1);
+        return;
+      }
+    }
+  }, { passive: true });
+
   var saved;
   try { saved = localStorage.getItem('chez-chapter'); } catch(e) {}
   if (saved) {
