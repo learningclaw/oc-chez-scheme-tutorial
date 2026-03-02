@@ -12717,8 +12717,16 @@ function showChapter(idx) {
 }
 
 function renderAllChapters() {
+  var dbg = document.createElement('div');
+  dbg.id = 'debug-output';
+  dbg.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:red;color:white;padding:1rem;font-size:14px;max-height:50vh;overflow:auto;';
+  document.body.appendChild(dbg);
+  function dbgLog(msg) { dbg.innerHTML += msg + '<br>'; }
+
   try {
+  dbgLog('chapters count: ' + chapters.length);
   var container = document.getElementById('pages-container');
+  dbgLog('container: ' + (container ? 'found' : 'null'));
   container.innerHTML = '';
   chapterStartPage = [];
   var globalPageIndex = 0;
@@ -12726,7 +12734,7 @@ function renderAllChapters() {
   for (var ci = 0; ci < chapters.length; ci++) {
     chapterStartPage.push(globalPageIndex);
     var chapterPages = splitChapterIntoPages(chapters[ci].html, ci);
-    console.log('Chapter', ci, 'pages:', chapterPages.length);
+    dbgLog('Ch ' + ci + ': ' + chapterPages.length + ' pages');
     for (var p = 0; p < chapterPages.length; p++) {
       var pageDiv = document.createElement('div');
       pageDiv.className = 'page';
@@ -12737,15 +12745,16 @@ function renderAllChapters() {
       container.appendChild(pageDiv);
       globalPageIndex++;
     }
+    if (ci >= 2) break; // Only first 3 chapters for debug
   }
 
   totalPages = globalPageIndex;
   currentPage = 0;
-  console.log('Total pages:', totalPages);
+  dbgLog('Total pages: ' + totalPages);
   updatePageIndicator();
   highlightAll();
   wireCodeBlocks();
-  } catch(e) { console.error('renderAllChapters error:', e); document.body.innerHTML = '<pre style="color:red;padding:2rem;">' + e.message + '\n' + e.stack + '</pre>'; }
+  } catch(e) { dbgLog('ERROR: ' + e.message + ' | ' + e.stack); }
 }
 
 function splitChapterIntoPages(html, chapterIdx) {
