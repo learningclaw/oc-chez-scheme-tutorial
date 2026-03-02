@@ -12717,6 +12717,7 @@ function showChapter(idx) {
 }
 
 function renderAllChapters() {
+  try {
   var container = document.getElementById('pages-container');
   container.innerHTML = '';
   chapterStartPage = [];
@@ -12725,6 +12726,7 @@ function renderAllChapters() {
   for (var ci = 0; ci < chapters.length; ci++) {
     chapterStartPage.push(globalPageIndex);
     var chapterPages = splitChapterIntoPages(chapters[ci].html, ci);
+    console.log('Chapter', ci, 'pages:', chapterPages.length);
     for (var p = 0; p < chapterPages.length; p++) {
       var pageDiv = document.createElement('div');
       pageDiv.className = 'page';
@@ -12739,9 +12741,11 @@ function renderAllChapters() {
 
   totalPages = globalPageIndex;
   currentPage = 0;
+  console.log('Total pages:', totalPages);
   updatePageIndicator();
   highlightAll();
   wireCodeBlocks();
+  } catch(e) { console.error('renderAllChapters error:', e); document.body.innerHTML = '<pre style="color:red;padding:2rem;">' + e.message + '\n' + e.stack + '</pre>'; }
 }
 
 function splitChapterIntoPages(html, chapterIdx) {
