@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>清除缓存</title></head>
+<body style="background:#1a1b26;color:#c0caf5;font-family:sans-serif;padding:2rem;text-align:center;">
+<h2>正在清除缓存...</h2>
+<p id="status">请稍候</p>
+<script>
+(async function() {
+  var status = document.getElementById('status');
+  try {
+    // Unregister all service workers
+    var regs = await navigator.serviceWorker.getRegistrations();
+    for (var r of regs) { await r.unregister(); }
+    status.textContent = '已注销 ' + regs.length + ' 个 Service Worker';
+    
+    // Clear all caches
+    var keys = await caches.keys();
+    for (var k of keys) { await caches.delete(k); }
+    status.textContent += '\n已清除 ' + keys.length + ' 个缓存';
+    
+    // Redirect after 2 seconds
+    status.textContent += '\n\n2秒后自动跳转到教程...';
+    setTimeout(function() {
+      window.location.href = './index.html?t=' + Date.now();
+    }, 2000);
+  } catch(e) {
+    status.textContent = '错误: ' + e.message;
+  }
+})();
+</script>
+</body>
+</html>
