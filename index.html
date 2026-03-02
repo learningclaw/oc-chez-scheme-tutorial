@@ -12773,4 +12773,411 @@ document.addEventListener('keydown', function(e) {
 })();
 </script>
 </body>
+</html>var currentChapter = 0;
+var currentPage = 0;
+var totalPages = 0;
+
+function go(id) {
+  var idx = chapters.findIndex(function(c){ return c.id === id; });
+  if (idx >= 0) showChapter(idx);
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+
+function showChapter(idx) {
+  currentChapter = idx;
+  var ch = chapters[idx];
+  // Highlight active sidebar
+  document.querySelectorAll('.sidebar a').forEach(function(a){
+    a.classList.toggle('active', a.dataset.ch === ch.id);
+  });
+  // Split content into pages
+  renderPages(ch.html, ch.title, idx);
+  // Save state
+  try { localStorage.setItem('chez-chapter', ch.id); } catch(e) {}
+}
+
+function renderPages(html, title, chapterIdx) {
+  var container = document.getElementById('pages-container');
+  
+  // Parse HTML into a temp div
+  var temp = document.createElement('div');
+  temp.innerHTML = html;
+  
+  var pages = [];
+  var currentGroup = [];
+  var pCount = 0; // consecutive paragraph count
+  
+  function flushGroup() {
+    if (currentGroup.length > 0) {
+      pages.push(currentGroup.slice());
+      currentGroup = [];
+      pCount = 0;
+    }
+  }
+  
+  var children = Array.from(temp.childNodes);
+  
+  for (var i = 0; i < children.length; i++) {
+    var node = children[i];
+    
+    // Skip empty text nodes
+    if (node.nodeType === 3 && !node.textContent.trim()) continue;
+    
+    var tagName = node.tagName ? node.tagName.toUpperCase() : '';
+    
+    if (tagName === 'H1') {
+      flushGroup();
+      // H1 gets its own page - also add a subtitle if next is a paragraph
+      pages.push([node.cloneNode(true)]);
+      pCount = 0;
+      continue;
+    }
+    
+    if (tagName === 'H2') {
+      flushGroup();
+      // H2 + optionally the next paragraph
+      var group = [node.cloneNode(true)];
+      // peek next
+      if (i + 1 < children.length) {
+        var next = children[i + 1];
+        var nextTag = next.tagName ? next.tagName.toUpperCase() : '';
+        if (nextTag === 'P') {
+          group.push(next.cloneNode(true));
+          i++; // skip it
+        }
+      }
+      pages.push(group);
+      pCount = 0;
+      continue;
+    }
+    
+    if (tagName === 'H3' || tagName === 'H4' || tagName === 'H5' || tagName === 'H6') {
+      flushGroup();
+      // Heading + next element
+      var group = [node.cloneNode(true)];
+      if (i + 1 < children.length) {
+        var next = children[i + 1];
+        var nextTag = next.tagName ? next.tagName.toUpperCase() : '';
+        if (nextTag === 'P' || nextTag === 'PRE' || nextTag === 'UL' || nextTag === 'OL') {
+          group.push(next.cloneNode(true));
+          i++;
+        }
+      }
+      pages.push(group);
+      pCount = 0;
+      continue;
+    }
+    
+    // Code block -> own page, with preceding explanation if in group
+    if (node.classList && node.classList.contains('code-block')) {
+      // If current group has content, that becomes the "explanation" page
+      // and code block gets its own page
+      flushGroup();
+      pages.push([node.cloneNode(true)]);
+      pCount = 0;
+      continue;
+    }
+    
+    // Pre (bare code display without code-block wrapper)
+    if (tagName === 'PRE') {
+      flushGroup();
+      pages.push([node.cloneNode(true)]);
+      pCount = 0;
+      continue;
+    }
+    
+    // Exercise -> own page
+    if (node.classList && node.classList.contains('exercise')) {
+      flushGroup();
+      pages.push([node.cloneNode(true)]);
+      pCount = 0;
+      continue;
+    }
+    
+    // Table
+    if (tagName === 'TABLE' || (node.classList && node.classList.contains('table-wrap'))) {
+      flushGroup();
+      pages.push([node.cloneNode(true)]);
+      pCount = 0;
+      continue;
+    }
+    
+    // HR - just a separator, skip or flush
+    if (tagName === 'HR') {
+      flushGroup();
+      continue;
+    }
+    
+    // Blockquote -> treat as a paragraph-like element
+    if (tagName === 'BLOCKQUOTE') {
+      if (pCount >= 2) flushGroup();
+      currentGroup.push(node.cloneNode(true));
+      pCount++;
+      continue;
+    }
+    
+    // Paragraphs, UL, OL, DL
+    if (tagName === 'P' || tagName === 'UL' || tagName === 'OL' || tagName === 'DL') {
+      // A paragraph + bullet list = one page
+      if (tagName === 'UL' || tagName === 'OL') {
+        currentGroup.push(node.cloneNode(true));
+        pCount++;
+        // If list is long-ish, flush after it
+        if (node.children && node.children.length > 5) {
+          flushGroup();
+        }
+        continue;
+      }
+      
+      // Check if this paragraph is short
+      var textLen = (node.textContent || '').length;
+      
+      if (pCount >= 3 || (pCount >= 2 && textLen > 100)) {
+        flushGroup();
+      }
+      currentGroup.push(node.cloneNode(true));
+      pCount++;
+      continue;
+    }
+    
+    // DIV or anything else
+    if (tagName === 'DIV') {
+      // Check if it contains a code-block
+      if (node.querySelector && node.querySelector('.code-block')) {
+        flushGroup();
+        pages.push([node.cloneNode(true)]);
+        pCount = 0;
+        continue;
+      }
+    }
+    
+    // Default: add to current group
+    currentGroup.push(node.cloneNode(true));
+    pCount++;
+    if (pCount >= 3) flushGroup();
+  }
+  flushGroup();
+  
+  // Add navigation page at end
+  var navNodes = [];
+  var navDiv = document.createElement('div');
+  navDiv.style.cssText = 'display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;';
+  if (chapterIdx > 0) {
+    var btn = document.createElement('a');
+    btn.href = '#';
+    btn.textContent = '← ' + chapters[chapterIdx-1].title;
+    btn.style.cssText = 'padding:0.6rem 1rem;background:var(--bg2);color:var(--accent);border:1px solid var(--bg3);border-radius:6px;text-decoration:none;font-size:0.88rem;';
+    btn.onclick = function(e){ e.preventDefault(); showChapter(chapterIdx-1); };
+    navDiv.appendChild(btn);
+  }
+  if (chapterIdx < chapters.length - 1) {
+    var btn = document.createElement('a');
+    btn.href = '#';
+    btn.textContent = chapters[chapterIdx+1].title + ' →';
+    btn.style.cssText = 'padding:0.6rem 1rem;background:var(--bg2);color:var(--accent);border:1px solid var(--bg3);border-radius:6px;text-decoration:none;font-size:0.88rem;margin-left:auto;';
+    btn.onclick = function(e){ e.preventDefault(); showChapter(chapterIdx+1); };
+    navDiv.appendChild(btn);
+  }
+  pages.push([navDiv]);
+  
+  // Render pages
+  container.innerHTML = '';
+  totalPages = pages.length;
+  
+  for (var p = 0; p < pages.length; p++) {
+    var pageDiv = document.createElement('div');
+    pageDiv.className = 'page';
+    for (var n = 0; n < pages[p].length; n++) {
+      pageDiv.appendChild(pages[p][n]);
+    }
+    container.appendChild(pageDiv);
+  }
+  
+  // Reset scroll
+  container.scrollLeft = 0;
+  currentPage = 0;
+  updatePageIndicator();
+  
+  // Apply syntax highlighting and re-wire code blocks
+  highlightAll();
+  wireCodeBlocks();
+}
+
+function updatePageIndicator() {
+  document.getElementById('page-indicator').textContent = (currentPage + 1) + ' / ' + totalPages;
+}
+
+// Track current page via scroll
+var pagesContainer = null;
+var scrollTimer = null;
+
+function onPagesScroll() {
+  if (scrollTimer) clearTimeout(scrollTimer);
+  scrollTimer = setTimeout(function() {
+    if (!pagesContainer) return;
+    var w = pagesContainer.clientWidth;
+    if (w === 0) return;
+    var newPage = Math.round(pagesContainer.scrollLeft / w);
+    if (newPage !== currentPage) {
+      currentPage = newPage;
+      updatePageIndicator();
+    }
+  }, 50);
+}
+
+function goToPage(idx) {
+  if (!pagesContainer) return;
+  if (idx < 0 || idx >= totalPages) return;
+  pagesContainer.scrollTo({ left: idx * pagesContainer.clientWidth, behavior: 'smooth' });
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('open');
+}
+
+// REPL
+var replOpen = false;
+function toggleRepl() {
+  replOpen = !replOpen;
+  document.getElementById('repl-sheet').classList.toggle('open', replOpen);
+  if (replOpen) document.getElementById('repl-input').focus();
+}
+
+// Syntax highlighting for Scheme
+function highlightScheme(code) {
+  var s = code;
+  s = s.replace(/(;[^\n]*)/g, '<span class="cm">$1</span>');
+  s = s.replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)/g, '<span class="str">$1</span>');
+  s = s.replace(/\b(#t|#f)\b/g, '<span class="bool">$1</span>');
+  s = s.replace(/(?<=[(\s])(-?\d+(?:\.\d+)?(?:\/\d+)?)/g, '<span class="num">$1</span>');
+  var kws = ['define','define-syntax','define-record-type','lambda','let','let\\*','letrec','if','cond','case','when','unless','begin','and','or','not','set!','do','syntax-rules','syntax-case','quote','quasiquote','unquote','import','export','library','else','=>'];
+  var kwRe = new RegExp('(?<=\\()('+kws.join('|')+')(?=\\s|\\))', 'g');
+  s = s.replace(kwRe, '<span class="kw">$1</span>');
+  return s;
+}
+
+function highlightAll() {
+  document.querySelectorAll('code.language-scheme').forEach(function(el){
+    el.innerHTML = highlightScheme(el.innerHTML);
+  });
+}
+
+// Code execution
+var biwa;
+try { biwa = new BiwaScheme.Interpreter(function(){}); } catch(e) {}
+
+function runScheme(code) {
+  var output = '';
+  var oldPuts = BiwaScheme.Port.current_output.put_string;
+  BiwaScheme.Port.current_output.put_string = function(s) { output += s; };
+  try {
+    var result = biwa.evaluate(code);
+    if (result !== undefined && result !== BiwaScheme.undef) {
+      output += (output ? '\n' : '') + BiwaScheme.to_write(result);
+    }
+  } catch(e) {
+    output += '错误: ' + (e.message || e);
+    BiwaScheme.Port.current_output.put_string = oldPuts;
+    return { output: output, error: true };
+  }
+  BiwaScheme.Port.current_output.put_string = oldPuts;
+  return { output: output || '(无输出)', error: false };
+}
+
+function wireCodeBlocks() {
+  document.querySelectorAll('.code-block').forEach(function(block) {
+    var editBtn = block.querySelector('.btn-edit');
+    var runBtn = block.querySelector('.btn-run');
+    var editor = block.querySelector('.code-editor');
+    var display = block.querySelector('.code-display');
+    var outputDiv = block.querySelector('.code-output');
+    
+    if (editBtn) {
+      editBtn.onclick = function() {
+        if (!editor) return;
+        if (editor.style.display === 'none') {
+          editor.style.display = 'block';
+          if (display) display.style.display = 'none';
+          editor.focus();
+        } else {
+          editor.style.display = 'none';
+          if (display) display.style.display = 'block';
+        }
+      };
+    }
+    if (runBtn) {
+      runBtn.onclick = function() {
+        var code = (editor && editor.style.display !== 'none') ? editor.value : (block.querySelector('code') ? block.querySelector('code').textContent : '');
+        var result = runScheme(code);
+        if (outputDiv) {
+          outputDiv.textContent = result.output;
+          outputDiv.className = 'code-output' + (result.error ? ' error' : '');
+          outputDiv.style.display = 'block';
+        }
+      };
+    }
+  });
+}
+
+// REPL
+var replHistory = [];
+var replHistIdx = -1;
+
+function replEval() {
+  var input = document.getElementById('repl-input');
+  var output = document.getElementById('repl-output');
+  var code = input.value.trim();
+  if (!code) return;
+  replHistory.unshift(code);
+  replHistIdx = -1;
+  output.textContent += '> ' + code + '\n';
+  var result = runScheme(code);
+  output.textContent += result.output + '\n';
+  output.scrollTop = output.scrollHeight;
+  input.value = '';
+}
+
+function clearRepl() {
+  document.getElementById('repl-output').textContent = '';
+}
+
+// Tab key in editors
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Tab' && e.target.classList.contains('code-editor')) {
+    e.preventDefault();
+    var s = e.target.selectionStart;
+    e.target.value = e.target.value.substring(0,s) + '  ' + e.target.value.substring(e.target.selectionEnd);
+    e.target.selectionStart = e.target.selectionEnd = s + 2;
+  }
+});
+
+// REPL history navigation  
+document.addEventListener('DOMContentLoaded', function() {
+  var input = document.getElementById('repl-input');
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowUp') { e.preventDefault(); if (replHistIdx < replHistory.length-1) { replHistIdx++; input.value = replHistory[replHistIdx]; } }
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (replHistIdx > 0) { replHistIdx--; input.value = replHistory[replHistIdx]; } else { replHistIdx = -1; input.value = ''; } }
+  });
+
+  // Set up pages container
+  pagesContainer = document.getElementById('pages-container');
+  pagesContainer.addEventListener('scroll', onPagesScroll);
+  
+  // Tap zones
+  document.getElementById('tap-left').addEventListener('click', function(){ goToPage(currentPage - 1); });
+  document.getElementById('tap-right').addEventListener('click', function(){ goToPage(currentPage + 1); });
+
+  // Init
+  var saved;
+  try { saved = localStorage.getItem('chez-chapter'); } catch(e) {}
+  if (saved) {
+    var idx = chapters.findIndex(function(c){ return c.id === saved; });
+    if (idx >= 0) { showChapter(idx); return; }
+  }
+  showChapter(0);
+});
+</script>
+</body>
 </html>
