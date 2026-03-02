@@ -12883,7 +12883,6 @@ function onPagesScroll() {
 function goToPage(idx) {
   if (!pagesContainer) return;
   if (idx < 0 || idx >= totalPages) return;
-  }
   pagesContainer.scrollTo({ left: idx * pagesContainer.clientWidth, behavior: 'smooth' });
 }
 
