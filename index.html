@@ -91,10 +91,10 @@ html, body {
   height:100vh;
   scroll-snap-align: start;
   overflow-y: auto;
-  padding: 3.5rem 1.2rem 3.5rem;
+  padding: 2rem 1.2rem 3.5rem;
   display:flex;
   flex-direction:column;
-  justify-content:center;
+  justify-content:flex-start;
   scrollbar-width: none;
 }
 .page::-webkit-scrollbar { display:none; }
@@ -12726,102 +12726,58 @@ function renderPages(html, title, chapterIdx) {
 
   var children = Array.from(temp.childNodes);
 
+  // New splitting logic: group by H2 sections (one knowledge point per page)
+  // H1 = title page alone
+  // H2 = start a new section page, collect everything until next H2 or end
+  // Within a section: group heading + explanations + code as one unit
+
   for (var i = 0; i < children.length; i++) {
     var node = children[i];
     if (node.nodeType === 3 && !node.textContent.trim()) continue;
-
     var tagName = node.tagName ? node.tagName.toUpperCase() : '';
+
+    if (tagName === 'HR') { flushGroup(); continue; }
 
     if (tagName === 'H1') {
       flushGroup();
+      // H1 gets its own title page
       pages.push([node.cloneNode(true)]);
       continue;
     }
 
     if (tagName === 'H2') {
+      // Start new section: flush previous, then collect H2 + everything until next H2/H1
       flushGroup();
-      var group = [node.cloneNode(true)];
-      if (i + 1 < children.length) {
-        var next = children[i + 1];
-        var nextTag = next.tagName ? next.tagName.toUpperCase() : '';
-        if (nextTag === 'P') { group.push(next.cloneNode(true)); i++; }
-      }
-      pages.push(group);
-      continue;
-    }
-
-    if (tagName === 'H3' || tagName === 'H4' || tagName === 'H5' || tagName === 'H6') {
-      flushGroup();
-      var group = [node.cloneNode(true)];
-      if (i + 1 < children.length) {
-        var next = children[i + 1];
-        var nextTag = next.tagName ? next.tagName.toUpperCase() : '';
-        if (nextTag === 'P' || nextTag === 'PRE' || nextTag === 'UL' || nextTag === 'OL') {
-          group.push(next.cloneNode(true)); i++;
+      currentGroup.push(node.cloneNode(true));
+      pCount = 0;
+      // Gather content until next H2, H1, or HR
+      while (i + 1 < children.length) {
+        var peek = children[i + 1];
+        if (!peek.tagName) { i++; currentGroup.push(peek.cloneNode(true)); continue; }
+        var peekTag = peek.tagName.toUpperCase();
+        if (peekTag === 'H1' || peekTag === 'H2' || peekTag === 'HR') break;
+        // If we already have a code block and hit another H3 or code block, flush as separate page
+        if (peekTag === 'H3') {
+          flushGroup();
         }
-      }
-      pages.push(group);
-      continue;
-    }
-
-    if (node.classList && node.classList.contains('code-block')) {
-      flushGroup();
-      pages.push([node.cloneNode(true)]);
-      continue;
-    }
-
-    if (tagName === 'PRE') {
-      flushGroup();
-      pages.push([node.cloneNode(true)]);
-      continue;
-    }
-
-    if (node.classList && node.classList.contains('exercise')) {
-      flushGroup();
-      pages.push([node.cloneNode(true)]);
-      continue;
-    }
-
-    if (tagName === 'TABLE' || (node.classList && node.classList.contains('table-wrap'))) {
-      flushGroup();
-      pages.push([node.cloneNode(true)]);
-      continue;
-    }
-
-    if (tagName === 'HR') { flushGroup(); continue; }
-
-    if (tagName === 'BLOCKQUOTE') {
-      if (pCount >= 2) flushGroup();
-      currentGroup.push(node.cloneNode(true));
-      pCount++;
-      continue;
-    }
-
-    if (tagName === 'P' || tagName === 'UL' || tagName === 'OL' || tagName === 'DL') {
-      if (tagName === 'UL' || tagName === 'OL') {
-        currentGroup.push(node.cloneNode(true));
+        i++;
+        currentGroup.push(peek.cloneNode(true));
         pCount++;
-        if (node.children && node.children.length > 5) flushGroup();
-        continue;
+        // Flush after a code block + some content following it, to keep pages manageable
+        var isCodeBlock = peek.classList && (peek.classList.contains('code-block') || peek.classList.contains('table-wrap'));
+        var isExercise = peek.classList && peek.classList.contains('exercise');
+        if (isCodeBlock && pCount >= 4) { flushGroup(); }
+        if (isExercise && pCount >= 3) { flushGroup(); }
+        if (pCount >= 8) { flushGroup(); }
       }
-      var textLen = (node.textContent || '').length;
-      if (pCount >= 3 || (pCount >= 2 && textLen > 100)) flushGroup();
-      currentGroup.push(node.cloneNode(true));
-      pCount++;
+      flushGroup();
       continue;
     }
 
-    if (tagName === 'DIV') {
-      if (node.querySelector && node.querySelector('.code-block')) {
-        flushGroup();
-        pages.push([node.cloneNode(true)]);
-        continue;
-      }
-    }
-
+    // Anything outside H2 sections: just accumulate
     currentGroup.push(node.cloneNode(true));
     pCount++;
-    if (pCount >= 3) flushGroup();
+    if (pCount >= 6) flushGroup();
   }
   flushGroup();
 
