@@ -1,4 +1,4 @@
-const CACHE = 'chez-scheme-v4';
+const CACHE = 'chez-scheme-v5';
 const ASSETS = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
