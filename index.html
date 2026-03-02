@@ -12781,29 +12781,7 @@ function renderPages(html, title, chapterIdx) {
   }
   flushGroup();
 
-  // Add nav buttons to the LAST page (not a separate page)
-  var navDiv = document.createElement('div');
-  navDiv.style.cssText = 'display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--bg3);';
-  if (chapterIdx > 0) {
-    var btn = document.createElement('a');
-    btn.href = '#'; btn.textContent = '\u2190 ' + chapters[chapterIdx-1].title;
-    btn.style.cssText = 'padding:0.6rem 1rem;background:var(--bg2);color:var(--accent);border:1px solid var(--bg3);border-radius:6px;text-decoration:none;font-size:0.88rem;';
-    btn.onclick = function(e){ e.preventDefault(); showChapter(chapterIdx-1); };
-    navDiv.appendChild(btn);
-  }
-  if (chapterIdx < chapters.length - 1) {
-    var btn = document.createElement('a');
-    btn.href = '#'; btn.textContent = chapters[chapterIdx+1].title + ' \u2192';
-    btn.style.cssText = 'padding:0.6rem 1rem;background:var(--bg2);color:var(--accent);border:1px solid var(--bg3);border-radius:6px;text-decoration:none;font-size:0.88rem;margin-left:auto;';
-    btn.onclick = function(e){ e.preventDefault(); showChapter(chapterIdx+1); };
-    navDiv.appendChild(btn);
-  }
-  // Append to last page instead of creating a new page
-  if (pages.length > 0) {
-    pages[pages.length - 1].push(navDiv);
-  } else {
-    pages.push([navDiv]);
-  }
+  // No nav buttons - chapter switching is done by swiping past last/first page
 
   container.innerHTML = '';
   totalPages = pages.length;
@@ -12887,7 +12865,20 @@ function showChapterAtEnd(idx) {
 
 function goToPage(idx) {
   if (!pagesContainer) return;
-  if (idx < 0 || idx >= totalPages) return;
+  // Swipe past last page → next chapter
+  if (idx >= totalPages) {
+    if (currentChapter < chapters.length - 1) {
+      showChapter(currentChapter + 1);
+    }
+    return;
+  }
+  // Swipe before first page → previous chapter (go to its last page)
+  if (idx < 0) {
+    if (currentChapter > 0) {
+      showChapterAtEnd(currentChapter - 1);
+    }
+    return;
+  }
   pagesContainer.scrollTo({ left: idx * pagesContainer.clientWidth, behavior: 'smooth' });
 }
 
